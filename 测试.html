@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>夹层畸变综合测评系统 - 病态事务所</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft YaHei",SimSun}
+body{background:#0c0c12;color:#e2dfe9;padding:20px;min-height:100vh}
+.wrap{max-width:920px;margin:0 auto}
+.card{background:#171724;border:1px solid #412f50;border-radius:12px;padding:28px;margin-bottom:24px}
+h1{color:#d8b8e0;margin-bottom:12px;font-size:26px}
+h2{color:#d0a8d6;margin:10px 0 16px;font-size:20px}
+h3{color:#c99fd0;margin:8px 0}
+.desc{color:#b9a6c7;margin-bottom:20px;line-height:1.6}
+hr{border:none;border-top:1px solid #3a2b48;margin:20px 0}
+.set-row{margin:14px 0}
+label{display:inline-block;width:180px}
+select{padding:7px 10px;background:#202030;color:#fff;border:1px solid #583e70;border-radius:4px;width:140px}
+.btn{background:#724488;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:16px;cursor:pointer;margin:6px 4px}
+.btn:hover{background:#8c54a6}
+.btn:disabled{background:#3a2b48;color:#888;cursor:not-allowed}
+.question-block{background:#222234;padding:20px;border-radius:10px;margin:18px 0}
+.q-title{font-size:17px;margin-bottom:14px;line-height:1.6}
+.opt-item{margin:10px 0;cursor:pointer;padding:10px 12px;border-radius:4px;border-left:4px solid transparent;transition:all 0.2s}
+.opt-item:hover{background:#2d2d42}
+.opt-item.selected{background:#3d2c4d;border-left:4px solid #d8b8e0;font-weight:bold;}
+.result-box{background:#11111e;padding:22px;border-radius:10px;margin-top:16px;white-space:pre-line;line-height:1.8;color:#e6cfe6}
+.hide{display:none}
+.tip{font-size:14px;color:#a890b8;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card" id="startPanel">
+        <h1>夹层畸变综合测评系统</h1>
+        <p class="desc">融合通用基础心理测试 + 病态事务所世界观专属题库<br>自动判定修行适配路径、原生情绪病态群系、情绪激化死亡风险等级</p>
+        <hr>
+        <div class="set-row">
+            <label>修行路径测试抽取题量：</label>
+            <select id="pathCount">
+                <option value="10">10题（简易）</option>
+                <option value="15" selected>15题（标准推荐）</option>
+                <option value="25">25题（完整版）</option>
+            </select>
+        </div>
+        <div class="set-row">
+            <label>病态心理群系测试抽取题量：</label>
+            <select id="illCount">
+                <option value="12">12题（简易）</option>
+                <option value="20" selected>20题（标准推荐）</option>
+                <option value="35">35题（完整版）</option>
+            </select>
+        </div>
+        <hr>
+        <button class="btn" onclick="startTest()">开始完整测评</button>
+        <p class="tip">说明：系统随机抽取题目，每次测试题目组合不同，结果仅供人格&畸变易感参考</p>
+    </div>
+
+    <div class="card hide" id="testPanel">
+        <h2 id="testStageTitle"></h2>
+        <div id="qContainer"></div>
+        <div style="margin-top:20px">
+            <button class="btn" id="prevBtn" onclick="prevQuestion()">上一题</button>
+            <button class="btn" onclick="nextQuestion()">下一题</button>
+            <button class="btn" onclick="submitAllAnswer()">提交全部答案生成报告</button>
+        </div>
+    </div>
+
+    <div class="card hide" id="reportPanel">
+        <h2>完整测评分析报告</h2>
+        <div class="result-box" id="reportText"></div>
+        <button class="btn" onclick="resetAll()">重新进行测试</button>
+    </div>
+</div>
+
+<script>
+// 全局变量
+let pathList = [];
+let illList = [];
+let currentType = "path";
+let currentIndex = 0;
+let pathAnswer = [];
+let illAnswer = [];
+
+// 随机抽取数组函数
+function getRandomArr(arr, num){
+    let temp = [...arr];
+    let res = [];
+    for(let i=0;i<num;i++){
+        let r = Math.floor(Math.random()*temp.length);
+        res.push(temp[r]);
+        temp.splice(r,1);
+    }
+    return res;
+}
+
+// 切换页面显示
+function hideAll(){
+    document.getElementById("startPanel").classList.add("hide");
+    document.getElementById("testPanel").classList.add("hide");
+    document.getElementById("reportPanel").classList.add("hide");
+}
+
+// 重置全部
+function resetAll(){
+    hideAll();
+    document.getElementById("startPanel").classList.remove("hide");
+    pathList = [];illList = [];currentType="path";currentIndex=0;pathAnswer=[];illAnswer=[];
+}
+
+// 渲染单题
+function renderQ(){
+    let wrap = document.getElementById("qContainer");
+    wrap.innerHTML = "";
+    let item;
+    
+    // 控制上一题按钮的状态（在第一题时禁用）
+    let prevBtn = document.getElementById("prevBtn");
+    if (currentType === "path" && currentIndex === 0) {
+        prevBtn.disabled = true;
+    } else {
+        prevBtn.disabled = false;
+    }
+
+    if(currentType === "path"){
+        item = pathList[currentIndex];
+        let ans = pathAnswer[currentIndex]; // 获取当前题的答案
+        
+        document.getElementById("testStageTitle").innerText = `修行路径测评 第${currentIndex+1}/${pathList.length}题`;
+        let html = `<div class="question-block"><div class="q-title">${item.q}</div>`;
+        html += `<div class="opt-item ${ans === 'a' ? 'selected' : ''}" onclick="savePathAns('a')">A. ${item.a}</div>`;
+        html += `<div class="opt-item ${ans === 'b' ? 'selected' : ''}" onclick="savePathAns('b')">B. ${item.b}</div>`;
+        html += `<div class="opt-item ${ans === 'c' ? 'selected' : ''}" onclick="savePathAns('c')">C. ${item.c}</div>`;
+        html += `<div class="opt-item ${ans === 'd' ? 'selected' : ''}" onclick="savePathAns('d')">D. ${item.d}</div>`;
+        html += `<div class="opt-item ${ans === 'e' ? 'selected' : ''}" onclick="savePathAns('e')">E. ${item.e}</div>`;
+        html += `<div class="opt-item ${ans === 'f' ? 'selected' : ''}" onclick="savePathAns('f')">F. ${item.f}</div></div>`;
+        wrap.innerHTML = html;
+    }else{
+        item = illList[currentIndex];
+        let ans = illAnswer[currentIndex]; // 获取当前题的答案
+        
+        document.getElementById("testStageTitle").innerText = `病态群系测评 第${currentIndex+1}/${illList.length}题`;
+        let html = `<div class="question-block"><div class="q-title">${item.q}</div>`;
+        html += `<div class="opt-item ${ans === 'W' ? 'selected' : ''}" onclick="saveIllAns('W')">W. ${item.W}</div>`;
+        html += `<div class="opt-item ${ans === 'Z' ? 'selected' : ''}" onclick="saveIllAns('Z')">Z. ${item.Z}</div>`;
+        html += `<div class="opt-item ${ans === 'M' ? 'selected' : ''}" onclick="saveIllAns('M')">M. ${item.M}</div>`;
+        html += `<div class="opt-item ${ans === 'H' ? 'selected' : ''}" onclick="saveIllAns('H')">H. ${item.H}</div>`;
+        html += `<div class="opt-item ${ans === 'K' ? 'selected' : ''}" onclick="saveIllAns('K')">K. ${item.K}</div></div>`;
+        wrap.innerHTML = html;
+    }
+}
+
+// 保存路径答案
+function savePathAns(type){
+    pathAnswer[currentIndex] = type;
+    renderQ(); // 重新渲染以刷新高亮状态
+}
+// 保存病态答案
+function saveIllAns(type){
+    illAnswer[currentIndex] = type;
+    renderQ(); // 重新渲染以刷新高亮状态
+}
+
+// 上一题逻辑
+function prevQuestion(){
+    if(currentType === "path"){
+        if(currentIndex > 0){
+            currentIndex--;
+            renderQ();
+        }
+    }else{
+        if(currentIndex > 0){
+            currentIndex--;
+            renderQ();
+        }else{
+            // 如果在病态测试第一题点击上一题，退回到路径测试的最后一题
+            currentType = "path";
+            currentIndex = pathList.length - 1;
+            renderQ();
+        }
+    }
+}
+
+// 下一题逻辑
+function nextQuestion(){
+    if(currentType === "path"){
+        if(pathAnswer[currentIndex] === undefined){
+            alert("请选择当前题目选项再继续！");
+            return;
+        }
+        currentIndex++;
+        if(currentIndex >= pathList.length){
+            // 切换到病态测试
+            currentType = "ill";
+            currentIndex = 0;
+        }
+    }else{
+        if(illAnswer[currentIndex] === undefined){
+            alert("请选择当前题目选项再继续！");
+            return;
+        }
+        currentIndex++;
+        if(currentIndex >= illList.length){
+            // 最后一题点下一题可以给提示或自动防越界
+            currentIndex = illList.length - 1;
+            alert("已经是最后一题，请点击下方提交全部答案！");
+            return;
+        }
+    }
+    renderQ();
+}
+
+// 开始测试入口
+function startTest(){
+    let pNum = Number(document.getElementById("pathCount").value);
+    let iNum = Number(document.getElementById("illCount").value);
+    // 随机抽题
+    pathList = getRandomArr(allPathBank, pNum);
+    illList = getRandomArr(allIllBank, iNum);
+    // 重置答案列表
+    pathAnswer = [];
+    illAnswer = [];
+    // 切换面板
+    hideAll();
+    document.getElementById("testPanel").classList.remove("hide");
+    currentType = "path";
+    currentIndex = 0;
+    renderQ();
+}
+
+// 提交全部计算报告
+function submitAllAnswer(){
+    // 校验全部作答
+    for(let i=0;i<pathList.length;i++){
+        if(pathAnswer[i] === undefined){
+            alert(`路径测试第${i+1}题未作答，请检查！`);
+            return;
+        }
+    }
+    for(let i=0;i<illList.length;i++){
+        if(illAnswer[i] === undefined){
+            alert(`病态测试第${i+1}题未作答，请检查！`);
+            return;
+        }
+    }
+    
+    // 计分统计
+    let pathScore = {a:0,b:0,c:0,d:0,e:0,f:0};
+    pathAnswer.forEach(v=>pathScore[v]++);
+    let illScore = {W:0,Z:0,M:0,H:0,K:0};
+    illAnswer.forEach(v=>illScore[v]++);
+    
+    // 判定最高路径
+    let maxPath = Object.keys(pathScore).sort((x,y)=>pathScore[y]-pathScore[x])[0];
+    let pathText = "";
+    switch(maxPath){
+        case "a":pathText="【修行适配：畸变者】\n特质：接纳自身负面情绪化为力量，不排斥躯体畸变，擅长单一极端情绪领域作战，易感单一病灶长期侵蚀，需定期使用净晶中和情绪负荷。";break;
+        case "b":pathText="【修行适配：剥离者】\n特质：本能清除、斩断负面情绪污染，厌恶畸变特征，擅长净化他人病灶，对各类极端情绪抗性极高，但易压抑自身正常情绪。";break;
+        case "c":pathText="【修行适配：融合者】\n特质：擅长平衡调和多元情绪，无明显病灶偏向，生存容错率最高，情绪激化风险最低，适合团队缓冲维稳。";break;
+        case "d":pathText="【修行适配：契约畸兽师】\n特质：习惯依靠共生畸兽分担情绪压力，自身病灶负荷可向外分流，孤独感会快速催生与畸兽的深度羁绊。";break;
+        case "e":pathText="【修行适配：畸变武器武者】\n特质：排斥肉身承载病灶，全部情绪寄托兵器，自身畸变概率极低，但兵器长期堆积病灶会产生反噬风险。";break;
+        case "f":pathText="【修行适配：普通避险者】\n特质：本能回避所有超凡情绪力量，抵触畸变、畸兽、病灶环境，适合长期居住甲级宜居安全区域。";break;
+    }
+    // 判定最高病态
+    let maxIll = Object.keys(illScore).sort((x,y)=>illScore[y]-illScore[x])[0];
+    let illText = "";
+    let riskLevel = "";
+    switch(maxIll){
+        case "W":
+            illText="【原生主导病态：腐脉地裂·愧疚隐忍畸变】\n核心特征：习惯自我归罪、情绪长期向内积压，悲伤与自责深度绑定，属于慢性Ⅲ级情绪激化高危人群，极易长期自我内耗。";
+            riskLevel="风险评级：中高风险（慢性淤积，无明显爆发前兆）";
+            break;
+        case "Z":
+            illText="【原生主导病态：缠念沼泽·执念怀旧畸变】\n核心特征：沉溺过往回忆、无法放下离别与遗憾，悲伤依附旧人旧事循环往复，Ⅱ级追忆式情绪激化易感。";
+            riskLevel="风险评级：中等风险（创伤触发型，脱离回忆源可缓解）";
+            break;
+        case "M":
+            illText="【原生主导病态：空骸洼地·麻木空洞畸变】\n核心特征：情绪感知钝化、内心空洞乏力，丧失愉悦与悲伤感知，极易叠加恐惧病灶衍生Ⅳ级躁恐复合症。";
+            riskLevel="风险评级：高危风险（麻木叠加恐惧会触发颅内幻痛自毁冲动）";
+            break;
+        case "H":
+            illText="【原生主导病态：幻梦平原·虚妄幻想畸变】\n核心特征：依赖虚构幻象、不存在的友人填补内心空缺，依靠虚假欢乐掩盖现实痛苦，虚实混淆Ⅲ级反向激化易感。";
+            riskLevel="风险评级：中高风险（幻境破碎会引发重度精神崩溃）";
+            break;
+        case "K":
+            illText="【原生主导病态：惶颤幽谷·恐惧自毁畸变】\n核心特征：易滋生颅内虫噬幻痛、独处恐慌、自我伤害冲动，单次刺激即可触发Ⅳ~Ⅴ级超限情绪激化。";
+            riskLevel="风险评级：致死高危风险（极易出现自毁极端行为）";
+            break;
+    }
+    // 复合型判定
+    let topTwo = Object.entries(illScore).sort((a,b)=>b[1]-a[1]).slice(0,2);
+    let mixTip = "";
+    if(topTwo[0][1] === topTwo[1][1]){
+        mixTip = `\n⚠️复合型病态提示：${topTwo[0][0]}与${topTwo[1][0]}分值持平，属于双重易感体质，两种情绪病灶会互相叠加放大激化风险！`;
+    }
+    // 输出完整报告
+    let report = "===== 夹层畸变完整测评报告 =====\n";
+    report += pathText+"\n\n";
+    report += illText+"\n";
+    report += riskLevel+"\n";
+    report += mixTip;
+    document.getElementById("reportText").innerText = report;
+    hideAll();
+    document.getElementById("reportPanel").classList.remove("hide");
+}
+
+// 完整题库
+const allPathBank = [
+    {q:"面对心底长久无法摆脱的痛苦，你会？",a:"接纳痛苦融入自身化为力量",b:"强行斩断清除所有负面情绪",c:"调和多种情绪达到平衡",d:"寻找伙伴共同分担情绪",e:"寄托随身器物承载伤痛",f:"回避痛苦不接触极端情绪"},
+    {q:"他人陷入情绪崩溃失控时你的做法？",a:"旁观观察情绪畸变过程",b:"出手剥离对方病灶情绪",c:"温和中和平复对方心绪",d:"召唤共生伙伴制衡",e:"持兵器压制情绪洪流",f:"立刻远离避免被波及"},
+    {q:"长期待在充斥负面情绪的压抑环境你的感受？",a:"舒适，负面情绪能强化自身",b:"烦躁，想要净化整片环境",c:"内心平稳可自主调节",d:"亢奋，适合与共生体共振",e:"心口发闷需要净化兵器",f:"恐惧精神不适急于逃离"},
+    {q:"对于内心创伤与遗憾你的处理方式？",a:"保留创伤作为自身根基",b:"封印淡化相关记忆",c:"慢慢与创伤和解平衡",d:"与陪伴者互相倾诉疗伤",e:"将伤痛封存进武器",f:"独自硬扛不愿借助外力"},
+    {q:"遇到冲突对抗你依靠什么取胜？",a:"自身躯体畸变与情绪领域",b:"抽取剥离敌方负面情绪",c:"多元情绪中和形成屏障",d:"驯养畸兽的病灶攻击",e:"畸变武器兵域斩击",f:"依靠掩体逃跑规避战斗"},
+    {q:"生活积攒大量委屈压力你的习惯？",a:"接纳委屈沉淀为自身一部分",b:"主动切断思绪不再回想",c:"休闲放松平衡低落心态",d:"希望专属陪伴分担压力",e:"所有情绪只向随身物件释放",f:"拖延逃避不去思考压力"},
+    {q:"与亲友争吵决裂后你会？",a:"记住矛盾深埋心底",b:"刻意淡化隔绝这段记忆",c:"复盘双方想法寻求平衡",d:"找专属陪伴倾诉委屈",e:"烦闷寄托随身物品",f:"减少社交回避人际矛盾"},
+    {q:"长期熬夜精神透支濒临崩溃？",a:"接纳崩溃任由情绪宣泄",b:"理性强制压制所有感受",c:"散步听歌缓和极端心绪",d:"和陪伴载体同步精神分流",e:"紧握器物平复躁动",f:"发呆硬熬等待自然平复"},
+    {q:"多次做事失败不断打击自信？",a:"收下挫败转化前进动力",b:"摒弃自我否定负面认知",c:"平常心看待得失平衡心态",d:"向陪伴者倾诉缓解怀疑",e:"抚摸器物平复焦躁",f:"直接放弃避免持续受挫"},
+    {q:"刷到大量恶意指责负面舆论？",a:"全盘接纳负面冲击沉淀内心",b:"快速划走隔绝评价干扰",c:"客观分辨好坏维持平衡",d:"和信任陪伴者吐槽宣泄",e:"依靠物件稳定情绪",f:"主动规避这类负面信息"},
+    {q:"内心藏有难以启齿的伤痛秘密？",a:"埋藏心底与自我共存",b:"封锁淡化相关记忆",c:"缓慢疏导和伤痛和解",d:"仅向专属陪伴坦白",e:"情绪寄托器物不与人说",f:"绝不向任何人提起"},
+    {q:"人生突发重大变故情绪剧烈起伏？",a:"全盘吸收所有极端感受",b:"强行冷静切割失控情绪",c:"循序渐进调节平复震荡",d:"依靠共生陪伴分担冲击",e:"紧握器物隔绝情绪波动",f:"被动等待时间抚平"},
+    {q:"工作学习任务堆积持续焦虑？",a:"接纳焦虑转化动力",b:"分割源头清空焦虑思绪",c:"拆分任务劳逸结合平衡",d:"和陪伴对象互相打气",e:"依靠随身物件安定心神",f:"摆烂拖延减少思考压力"},
+    {q:"被他人无端误会满心委屈？",a:"收下委屈沉淀内心底色",b:"忽略误会不再纠结看法",c:"沟通平衡消除矛盾",d:"向专属陪伴倾诉委屈",e:"情绪寄托小物件舒缓",f:"懒得解释直接疏远对方"},
+    {q:"独处时脑海充斥大量负面念头？",a:"接纳思绪全部沉淀心底",b:"强制清空大脑阻断思考",c:"做轻松事冲淡负面想法",d:"与陪伴载体对话梳理思绪",e:"触摸寄托物平复内心",f:"用短视频填满大脑逃避思考"},
+    {q:"你如何看待自身负面情绪？",a:"情绪是力量，越多越强",b:"负面情绪是污染必须清除",c:"情绪需要平衡，不可极端",d:"情绪适合交给同伴分担",e:"情绪交由外物承载更佳",f:"尽量不要产生强烈情绪"},
+    {q:"看到身边人长期陷入抑郁痛苦，你倾向？",a:"不干预，观察对方情绪自然演化",b:"劝说对方斩断负面思绪停止内耗",c:"温和陪伴中和低落心境",d:"提供倾诉载体作为情绪出口",e:"赠予稳定心神的随身器物",f:"保持距离防止被负面情绪传染"},
+    {q:"长久孤身一人内心充满孤独感？",a:"吸收孤独化作自身特质",b:"屏蔽孤独转移注意力",c:"爱好冲淡独处空洞",d:"依靠共生伙伴消解孤单",e:"随身物件填补精神空缺",f:"频繁外出社交避免独处"},
+    {q:"计划许久的事情落空，满心失落？",a:"留存失落感受记于心底",b:"快速放下不再回想遗憾",c:"寻找其他乐趣平衡心态",d:"向陪伴对象倾诉失望",e:"依靠随身物品平复低落",f:"不再制定长期计划规避失落"},
+    {q:"持续自我否定，总觉得一无是处？",a:"接纳负面自我认知与之共存",b:"强行打断自我贬低的想法",c:"发掘优点平衡消极评价",d:"依靠陪伴获得自我认可",e:"寄托器物获取内心安定",f:"回避思考自我价值"},
+    {q:"外界所有人否定你的选择，压力巨大？",a:"接纳外界否定化作内心力量",b:"无视评价切断外部情绪干扰",c:"理性权衡平衡自我与他人",d:"向信任陪伴者倾诉压力",e:"随身物件稳定动摇内心",f:"顺从他人放弃自身选择逃避压力"},
+    {q:"频繁做压抑痛苦的噩梦，醒来心绪糟糕？",a:"接纳噩梦带来的负面情绪",b:"快速清空梦境记忆隔绝影响",c:"白天散心调和低落",d:"和陪伴载体诉说噩梦",e:"贴身寄托物安稳心神",f:"拖延入睡减少做梦"},
+    {q:"亲友离世长久沉浸悲伤？",a:"留存悲伤永久存于内心",b:"封存回忆隔绝悲伤",c:"适度怀念慢慢平复",d:"依靠陪伴缓解思念痛苦",e:"随身器物承载思念",f:"刻意回避相关回忆"},
+    {q:"察觉到自己长期反复内耗胡思乱想？",a:"放任思绪内耗接纳状态",b:"强行打断自我内耗",c:"转移注意力平衡纷乱思绪",d:"和陪伴载体梳理想法",e:"器物安定纷乱心神",f:"摆烂放任持续内耗"},
+    {q:"拥有强大负面情绪能量你会？",a:"吸收肉身完成进阶",b:"立刻封印永久不使用",c:"搭配正向情绪中和少量吸收",d:"传导契约畸兽分担负荷",e:"灌入畸变武器永久储存",f:"直接丢弃拒绝触碰"}
+];
+
+const allIllBank = [
+    {q:"心里难过时你的常态是？",W:"默默隐忍，全部怪自己，独自承受不倾诉",Z:"反复回想过往遗憾，放不下曾经的人和事",M:"什么都感受不到，内心一片空洞麻木",H:"幻想美好的画面/不存在的人陪伴自己",K:"脑海不断冒出恐怖画面，产生自残冲动"},
+    {q:"“有一个只有你能看见的朋友”你的内心偏向？",W:"不会幻想，只会独自赎罪沉默",Z:"幻想的是逝去真实存在过的故人",M:"没有精力产生任何幻想，思维呆滞",H:"会创造专属虚幻好友，依赖虚假陪伴",K:"只会看见吓人、让自己痛苦的幻象"},
+    {q:"长久独处后更容易出现？",W:"无尽自责，回想所有自己做错的事",Z:"沉溺回忆，反复咀嚼失去的悲伤",M:"昏沉乏力，喜怒哀乐全部消失",H:"编织美梦，活在幻想里逃避现实",K:"颅内虫噬般幻痛，想要伤害自己"},
+    {q:"面对离别与失去，你的反应？",W:"认为是自己不够好才导致分离，长久愧疚",Z:"无法放下，不停回忆过往相处片段",M:"毫无波澜，内心空空荡荡没有悲伤",H:"幻想对方从未离开，制造虚假陪伴",K:"害怕孤单，滋生无边未知恐慌"},
+    {q:"长期压抑情绪不宣泄，最终会变成？",W:"沉郁积压，源源不断自我归罪",Z:"困在回忆牢笼，走不出过去",M:"情绪感知彻底关闭，变得无感呆滞",H:"依靠幻想快乐掩盖心底压抑",K:"内心恐惧爆发，出现极端自毁想法"},
+    {q:"你更常出现哪种精神状态？",W:"自我惩罚、主动包揽所有过错",Z:"执着旧事，拒绝接纳新生活",M:"浑身乏力，对外界一切失去兴趣",H:"沉迷幻想，分不清现实与梦境",K:"莫名惊惧，脑中充斥恐怖幻觉"},
+    {q:"符合你的抑郁相关状态？",W:"自责自罪型忧郁，有悲伤但强行压抑",Z:"创伤低落，因失去长久消沉",M:"重度空洞麻木，完全丧失愉悦感",H:"靠虚假欢乐掩盖内心抑郁",K:"抑郁伴随持续恐慌、躯体幻痛"},
+    {q:"脑海里反复循环的内容是？",W:"自己犯下的过错、对不起他人的片段",Z:"已经逝去、无法挽回的回忆",M:"空白，没有任何清晰思绪",H:"自编的美好幻境、虚构人物对话",K:"各种可怕、折磨自身的恐怖画面"},
+    {q:"痛苦来袭时你的第一代偿方式？",W:"沉默隐忍，默默自我赎罪",Z:"沉浸回忆，反复回味伤痛",M:"封闭感知，变得麻木无感",H:"构建幻想世界逃避现实苦难",K:"产生撕裂、伤害自身的冲动"},
+    {q:"如何看待长久积压的悲伤？",W:"悲伤与自责绑定，只能独自咽下",Z:"悲伤来自割舍不掉的回忆",M:"悲伤会慢慢消失，最后只剩空洞",H:"用虚假快乐覆盖、掩埋悲伤",K:"悲伤催生深层恐惧，折磨大脑"},
+    {q:"无人陪伴时最容易滋生的思绪？",W:"我拖累所有人，我本该承受苦难",Z:"如果当初没有分开该有多好",M:"无所谓孤独，没有任何情绪波动",H:"幻想出专属伙伴陪自己聊天",K:"害怕独处，总感觉有东西伤害自己"},
+    {q:"被他人指责后你的内心活动？",W:"全部认同，加倍责怪自己",Z:"回忆过往所有被否定的瞬间",M:"毫无感触，内心一片平静空白",H:"幻想一个温柔幻境安抚自己",K:"恐慌焦虑，大脑出现剧痛幻觉"},
+    {q:"长久无疏导负面情绪最终走向？",W:"慢性隐忍式情绪淤积",Z:"追忆式悲伤循环往复",M:"情绪彻底枯竭，无感麻木",H:"沉溺幻梦，依赖虚假欢愉",K:"恐惧内化，转化自毁冲动"},
+    {q:"你最常产生的幻象类型？",W:"被自己伤害过的人前来追责",Z:"已经离世、分离的故人残影",M:"几乎不会产生任何幻象",H:"虚构的友人、完美虚假梦境",K:"啃噬头颅的虫类、恐怖黑影"},
+    {q:"现实充满痛苦，你会倾向？",W:"默默忍受，把罪责归于自身",Z:"停留在过去美好的回忆里",M:"放弃感知，任由心智空洞化",H:"创造虚假世界躲避一切痛苦",K:"陷入恐惧，想要摧毁自身结束痛苦"},
+    {q:"典型精神特质？",W:"自罪、隐忍、情绪向内积压",Z:"执念、怀旧、放不下过往遗憾",M:"空洞、迟钝、无感、行动力衰退",H:"幻造、虚假欢愉、依赖幻象",K:"惊惧、幻痛、潜藏自毁倾向"},
+    {q:"失眠头脑昏沉时脑中景象？",W:"不断复盘自己所有过错",Z:"一遍遍回放逝去的回忆",M:"一片空白，思维停滞发懵",H:"不断出现美好虚构幻境",K:"颅内虫咬刺痛，满是恐怖想象"},
+    {q:"别人劝你放下痛苦，你的感受？",W:"更加愧疚，认为自己不该难过",Z:"无法放下，回忆牢牢困住自己",M:"无所谓，没有任何情绪起伏",H:"不愿放下幻想，现实太过痛苦",K:"恐慌加剧，痛苦不断放大"},
+    {q:"内心孤独缺口的填补方式？",W:"自我惩罚抵消孤独",Z:"依靠过往回忆填补空缺",M:"直接关闭情绪，无视孤独",H:"创造看不见的幻想好友陪伴",K:"孤独催生无边恐惧折磨自己"},
+    {q:"长期滞留对应地貌后激化类型？",W:"慢性隐忍Ⅲ级愧疚激化",Z:"追忆循环Ⅱ级悲伤激化",M:"无感空洞叠加恐惧Ⅳ级躁恐激化",H:"虚实混淆Ⅲ级虚妄反向激化",K:"幻痛自毁Ⅳ级恐惧超限激化"},
+    {q:"做错小事之后你的想法？",W:"反复责怪自己，一无是处",Z:"回想过去所有类似错事",M:"毫无波澜快速忘记",H:"幻想有人温柔安慰淡化过错",K:"内心慌乱，害怕可怕报应"},
+    {q:"翻到故人遗留旧物？",W:"愧疚自责后悔没珍惜对方",Z:"沉浸回忆长时间翻看不肯收起",M:"内心无波动随手搁置",H:"幻想故人仍在身边对话",K:"莫名心慌头部压抑刺痛"},
+    {q:"一整天无事可做闲置在家？",W:"不停反思自我过错自我批判",Z:"翻看旧照片怀念过去",M:"发呆躺平思维空洞",H:"沉浸幻想和虚构人物互动",K:"内心恐慌浑身不安脑袋作痛"},
+    {q:"看见别人拥有长久知心好友？",W:"自认太差不配拥有亲密关系",Z:"怀念曾经拥有陪伴的时光",M:"毫无羡慕内心平静",H:"幻想专属看不见挚友相伴",K:"害怕永远孤身一人"},
+    {q:"多年前遗憾偶然想起？",W:"每次想起强烈自责自我惩罚",Z:"反复回想当初另一种选择",M:"想起也无悲伤麻木无感",H:"幻想改写完美结局",K:"想起后心慌失眠，产生头部不适感"}
+];
+</script>
+</body>
+</html>
